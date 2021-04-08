@@ -181,11 +181,6 @@ def main(args):
     # cv2.imwrite( '/content/content/content/Deformable-DETR/explained /sample before forward/tensor2.png', img[0][2].cpu().numpy(),)
     # cv2.imwrite( '/content/content/content/Deformable-DETR/explained /sample before forward/tensor3.png', img[0].cpu().numpy(),)
 
-    save_image(img[0][0],'/content/content/content/Deformable-DETR/explained /sample before forward/tensor0.png' )
-    save_image(img[0][1], '/content/content/content/Deformable-DETR/explained /sample before forward/tensor1.png')
-    save_image(img[0][2], '/content/content/content/Deformable-DETR/explained /sample before forward/tensor2.png')
-    save_image(img[0], '/content/content/content/Deformable-DETR/explained /sample before forward/tensor3.png')
-
 
 
     # propagate through the model

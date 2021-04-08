@@ -141,7 +141,7 @@ class DeformableDETR(nn.Module):
 
         import cv2
 
-        print(len(features))
+        print('feature size' , features[2].tensors.size())
 
         # for i in range(len(features)) : 
         #   print(type(features[i]))
@@ -151,11 +151,23 @@ class DeformableDETR(nn.Module):
         #   # cv2.imwrite(name, features[i])
 
 
+
+        channel1 = features[2].tensors[0, :, :,:]
+        # for i, feat in enumerate(channel1):
+        #   #print(feat.size())
+        #   name = '/content/Explain-Deformable-DETR/explained /features/feature_3_'+ str(i) + '.png'
+        #   if i==30:
+        #     break
+        #   print(name)
+        #   save_image(feat, name)
+
+        
         srcs = []
         masks = []
         for l, feat in enumerate(features):
             src, mask = feat.decompose()
             srcs.append(self.input_proj[l](src))
+            #print ('sdfsdfsdfsdfsdfsdf', self.input_proj[l](src))
             masks.append(mask)
             assert mask is not None
         if self.num_feature_levels > len(srcs):
@@ -172,9 +184,21 @@ class DeformableDETR(nn.Module):
                 masks.append(mask)
                 pos.append(pos_l)
 
+        print(len(srcs))
+        print(srcs[0].size())
+        #layer1 = srcs[3][0, :, :, :]
+        # for i, feat in enumerate(layer1):
+        #   #print(feat.size())
+        #   name = '/content/Explain-Deformable-DETR/explained /features/feature_3_'+ str(i) + '.png'
+        #   if i==10:
+        #     break
+        #   print(name)
+        #   save_image(feat, name)
+
         query_embeds = None
         if not self.two_stage:
             query_embeds = self.query_embed.weight
+  
         hs, init_reference, inter_references, enc_outputs_class, enc_outputs_coord_unact = self.transformer(srcs, masks, pos, query_embeds)
 
         outputs_classes = []
