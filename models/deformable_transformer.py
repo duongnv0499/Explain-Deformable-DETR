@@ -18,6 +18,7 @@ from torch.nn.init import xavier_uniform_, constant_, uniform_, normal_
 
 from util.misc import inverse_sigmoid
 from models.ops.modules import MSDeformAttn
+from torchvision.utils import save_image
 
 
 class DeformableTransformer(nn.Module):
@@ -80,8 +81,9 @@ class DeformableTransformer(nn.Module):
         pos = proposals[:, :, :, None] / dim_t
         # N, L, 4, 64, 2
         pos = torch.stack((pos[:, :, :, 0::2].sin(), pos[:, :, :, 1::2].cos()), dim=4).flatten(2)
+        print ("pos", pos[0][0].shape)
         return pos
-
+    
     def gen_encoder_output_proposals(self, memory, memory_padding_mask, spatial_shapes):
         N_, S_, C_ = memory.shape
         base_scale = 4.0
@@ -100,6 +102,12 @@ class DeformableTransformer(nn.Module):
             grid = (grid.unsqueeze(0).expand(N_, -1, -1, -1) + 0.5) / scale
             wh = torch.ones_like(grid) * 0.05 * (2.0 ** lvl)
             proposal = torch.cat((grid, wh), -1).view(N_, -1, 4)
+            print ('proposal width', W_.item())
+            abc = proposal.view(1, W_.item(), W_.item(), 4)
+            for i in range(4) :
+              name = "/content/Explain-Deformable-DETR/explained /proposal/" + str(lvl) + "_" + str(i)+".png"
+              save_image(abc[0][:,:,i], name)
+              
             proposals.append(proposal)
             _cur += (H_ * W_)
         output_proposals = torch.cat(proposals, 1)
@@ -163,12 +171,23 @@ class DeformableTransformer(nn.Module):
 
             topk = self.two_stage_num_proposals
             topk_proposals = torch.topk(enc_outputs_class[..., 0], topk, dim=1)[1]
+            
             topk_coords_unact = torch.gather(enc_outputs_coord_unact, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, 4))
+            print ('topk_proposals', topk_coords_unact[0][3])
+            print ('topk_proposals', topk_coords_unact[0][4])
+            print ('topk_proposals', topk_coords_unact[0][5])
             topk_coords_unact = topk_coords_unact.detach()
+
             reference_points = topk_coords_unact.sigmoid()
             init_reference_out = reference_points
+            print ('reference_points', reference_points[0][3])
+            print ('reference_points', reference_points[0][4])
+            print ('reference_points', reference_points[0][5])
+            #print ('reference_points', reference_points.shape)
             pos_trans_out = self.pos_trans_norm(self.pos_trans(self.get_proposal_pos_embed(topk_coords_unact)))
             query_embed, tgt = torch.split(pos_trans_out, c, dim=2)
+
+
         else:
             query_embed, tgt = torch.split(query_embed, c, dim=1)
             query_embed = query_embed.unsqueeze(0).expand(bs, -1, -1)
@@ -295,7 +314,9 @@ class DeformableTransformerDecoderLayer(nn.Module):
     def forward(self, tgt, query_pos, reference_points, src, src_spatial_shapes, level_start_index, src_padding_mask=None):
         # self attention
         q = k = self.with_pos_embed(tgt, query_pos)
+        print ('q, k', q.transpose(0, 1).shape)
         tgt2 = self.self_attn(q.transpose(0, 1), k.transpose(0, 1), tgt.transpose(0, 1))[0].transpose(0, 1)
+        print ('self_attn', tgt2.shape)
         tgt = tgt + self.dropout2(tgt2)
         tgt = self.norm2(tgt)
 
@@ -325,16 +346,22 @@ class DeformableTransformerDecoder(nn.Module):
     def forward(self, tgt, reference_points, src, src_spatial_shapes, src_level_start_index, src_valid_ratios,
                 query_pos=None, src_padding_mask=None):
         output = tgt
+        
+
+        #tgt, reference_points, memory,spatial_shapes, level_start_index, valid_ratios, query_embed, mask_flatten
 
         intermediate = []
         intermediate_reference_points = []
         for lid, layer in enumerate(self.layers):
+            print ('lid, layer', layer)
             if reference_points.shape[-1] == 4:
                 reference_points_input = reference_points[:, :, None] \
                                          * torch.cat([src_valid_ratios, src_valid_ratios], -1)[:, None]
+                print ("reference_points.shape[-1] == 4:", reference_points_input.shape)
             else:
                 assert reference_points.shape[-1] == 2
                 reference_points_input = reference_points[:, :, None] * src_valid_ratios[:, None]
+                print("reference_points.shape[-1] == 2", reference_points_input.shape)
             output = layer(output, query_pos, reference_points_input, src, src_spatial_shapes, src_level_start_index, src_padding_mask)
 
             # hack implementation for iterative bounding box refinement
