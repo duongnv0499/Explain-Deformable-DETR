@@ -198,9 +198,11 @@ class DeformableDETR(nn.Module):
         query_embeds = None
         if not self.two_stage:
             query_embeds = self.query_embed.weight
+        print (query_embeds)
   
         hs, init_reference, inter_references, enc_outputs_class, enc_outputs_coord_unact = self.transformer(srcs, masks, pos, query_embeds)
 
+        print ('self.class_embed', self.class_embed)
         outputs_classes = []
         outputs_coords = []
         for lvl in range(hs.shape[0]):
@@ -228,6 +230,7 @@ class DeformableDETR(nn.Module):
 
         if self.two_stage:
             enc_outputs_coord = enc_outputs_coord_unact.sigmoid()
+            print ('two stage enc_outputs_coord and enc_outputs_class', enc_outputs_coord.shape,  enc_outputs_coord_unact[0][0][:])
             out['enc_outputs'] = {'pred_logits': enc_outputs_class, 'pred_boxes': enc_outputs_coord}
         return out
 

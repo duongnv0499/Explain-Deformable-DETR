@@ -94,10 +94,24 @@ class MSDeformAttn(nn.Module):
         value = self.value_proj(input_flatten)
         if input_padding_mask is not None:
             value = value.masked_fill(input_padding_mask[..., None], float(0))
+
+        print ("input_padding_mask", input_padding_mask.shape, input_padding_mask)
+
+
         value = value.view(N, Len_in, self.n_heads, self.d_model // self.n_heads)
         sampling_offsets = self.sampling_offsets(query).view(N, Len_q, self.n_heads, self.n_levels, self.n_points, 2)
+
+        print ('sampling_offsets' , sampling_offsets.shape)
+
+
+
+
         attention_weights = self.attention_weights(query).view(N, Len_q, self.n_heads, self.n_levels * self.n_points)
+        print ('attention_weights' , attention_weights.shape)
+
+
         attention_weights = F.softmax(attention_weights, -1).view(N, Len_q, self.n_heads, self.n_levels, self.n_points)
+        print (' after softmax, attention_weights' , attention_weights.shape)
         # N, Len_q, n_heads, n_levels, n_points, 2
         if reference_points.shape[-1] == 2:
             offset_normalizer = torch.stack([input_spatial_shapes[..., 1], input_spatial_shapes[..., 0]], -1)

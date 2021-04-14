@@ -19,6 +19,7 @@ from torch.nn.init import xavier_uniform_, constant_, uniform_, normal_
 from util.misc import inverse_sigmoid
 from models.ops.modules import MSDeformAttn
 from torchvision.utils import save_image
+# from deformable_detr.py import DeformableDETR as D
 
 
 class DeformableTransformer(nn.Module):
@@ -81,7 +82,7 @@ class DeformableTransformer(nn.Module):
         pos = proposals[:, :, :, None] / dim_t
         # N, L, 4, 64, 2
         pos = torch.stack((pos[:, :, :, 0::2].sin(), pos[:, :, :, 1::2].cos()), dim=4).flatten(2)
-        print ("pos", pos[0][0].shape)
+        print ("pos", pos)
         return pos
     
     def gen_encoder_output_proposals(self, memory, memory_padding_mask, spatial_shapes):
@@ -134,6 +135,8 @@ class DeformableTransformer(nn.Module):
     def forward(self, srcs, masks, pos_embeds, query_embed=None):
         assert self.two_stage or query_embed is not None
 
+        print('masks', len(masks))
+
         # prepare input for encoder
         src_flatten = []
         mask_flatten = []
@@ -166,8 +169,12 @@ class DeformableTransformer(nn.Module):
             output_memory, output_proposals = self.gen_encoder_output_proposals(memory, mask_flatten, spatial_shapes)
 
             # hack implementation for two-stage Deformable DETR
+            print ('class_embed',  self.decoder.class_embed)
             enc_outputs_class = self.decoder.class_embed[self.decoder.num_layers](output_memory)
+            print ('enc_outputs_class', F.softmax(enc_outputs_class[0][0][:]))
             enc_outputs_coord_unact = self.decoder.bbox_embed[self.decoder.num_layers](output_memory) + output_proposals
+            enc_outputs_coord_unact1 = enc_outputs_coord_unact.sigmoid()
+            print ('enc_outputs_coord_unact1', enc_outputs_coord_unact1.shape, enc_outputs_coord_unact1[0][:][:])
 
             topk = self.two_stage_num_proposals
             topk_proposals = torch.topk(enc_outputs_class[..., 0], topk, dim=1)[1]
@@ -256,7 +263,12 @@ class DeformableTransformerEncoder(nn.Module):
     @staticmethod
     def get_reference_points(spatial_shapes, valid_ratios, device):
         reference_points_list = []
+        print ('valid_ratios', valid_ratios)
+        print ('spatial_shapes', spatial_shapes)
         for lvl, (H_, W_) in enumerate(spatial_shapes):
+
+            print ("H_", H_)
+            print('W_', W_)
 
             ref_y, ref_x = torch.meshgrid(torch.linspace(0.5, H_ - 0.5, H_, dtype=torch.float32, device=device),
                                           torch.linspace(0.5, W_ - 0.5, W_, dtype=torch.float32, device=device))
@@ -266,6 +278,7 @@ class DeformableTransformerEncoder(nn.Module):
             reference_points_list.append(ref)
         reference_points = torch.cat(reference_points_list, 1)
         reference_points = reference_points[:, :, None] * valid_ratios[:, None]
+        print ("reference_points", reference_points.shape)
         return reference_points
 
     def forward(self, src, spatial_shapes, level_start_index, valid_ratios, pos=None, padding_mask=None):
@@ -319,16 +332,26 @@ class DeformableTransformerDecoderLayer(nn.Module):
         print ('self_attn', tgt2.shape)
         tgt = tgt + self.dropout2(tgt2)
         tgt = self.norm2(tgt)
+        # print("tgt shape", tgt[0][:][1])
+
+        #save_image(tgt[0][], ('/content/Explain-Deformable-DETR/explained /temp/a.png'))
 
         # cross attention
         tgt2 = self.cross_attn(self.with_pos_embed(tgt, query_pos),
                                reference_points,
                                src, src_spatial_shapes, level_start_index, src_padding_mask)
+        #print ('tgt2', tgt2.shape)
+
+
+
         tgt = tgt + self.dropout1(tgt2)
         tgt = self.norm1(tgt)
 
         # ffn
         tgt = self.forward_ffn(tgt)
+
+        #print('tgt', tgt[0][:][0])
+
 
         return tgt
 
@@ -381,8 +404,12 @@ class DeformableTransformerDecoder(nn.Module):
                 intermediate.append(output)
                 intermediate_reference_points.append(reference_points)
 
+
         if self.return_intermediate:
+            print ('return_intermediate', (intermediate[0].size()))
             return torch.stack(intermediate), torch.stack(intermediate_reference_points)
+
+        
 
         return output, reference_points
 
