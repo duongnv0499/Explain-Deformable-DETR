@@ -32,6 +32,9 @@ from engine import evaluate, train_one_epoch
 from models import build_model
 import time
 import os
+torch.set_grad_enabled(False);
+
+import matplotlib.pyplot as plt
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Deformable DETR Detector', add_help=False)
@@ -140,6 +143,22 @@ transform = T.Compose([
     T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
 ])
 
+
+import models.visualize_func as V
+
+def printnorm(self, input, output):
+    # input is a tuple of packed inputs
+    # output is a Tensor. output.data is the Tensor we are interested
+    print('Inside ' + self.__class__.__name__ + ' forward')
+    print('')
+    print('input: ', type(input))
+    print('input[0]: ', type(input[0]))
+    print('output: ', type(output))
+    print('')
+    #print('input', input)
+    print('output, of ', output.shape)
+    print('output norm:')
+
 def main(args):
     utils.init_distributed_mode(args)
     print("git:\n  {}\n".format(utils.get_sha()))
@@ -185,6 +204,97 @@ def main(args):
 
     # propagate through the model
     outputs = model(img)
+
+    print ('-----------------------------------------------------------------------------')
+
+
+
+
+
+    # mean-std normalize the input image (batch-size: 1)
+    img = transform(im).unsqueeze(0)
+
+    img=img.cuda()
+
+    # propagate through the model
+    outputs = model(img)
+
+    # keep only predictions with 0.7+ confidence
+    probas = outputs['pred_logits'].softmax(-1)[0, :, :-1]
+    keep = probas.max(-1).values > 0.6
+
+    # convert boxes from [0; 1] to image scales
+    bboxes_scaled = V.rescale_bboxes(outputs['pred_boxes'][0, keep], im.size)
+
+    V.plot_results(im, probas[keep], bboxes_scaled, '/content/Explain-Deformable-DETR/explained /output/1.png')
+
+    print ('keep.nonzero()', keep)
+    # use lists to store the outputs via up-values
+    conv_features, enc_attn_weights, dec_attn_weights = [], [], []
+
+    hooks = [
+        model.backbone[-2].register_forward_hook(
+            lambda self, input, output: conv_features.append(output)
+        ),
+        model.transformer.encoder.layers[-1].self_attn.register_forward_hook(
+            lambda self, input, output: enc_attn_weights.append(output[0])
+        ),
+        model.transformer.decoder.layers[-1].self_attn.register_forward_hook(
+            lambda self, input, output: dec_attn_weights.append(output[0])
+        ),
+    ]
+
+    # propagate through the model
+    outputs = model(img)
+
+    for hook in hooks:
+        hook.remove()
+
+    # don't need the list anymore
+    conv_features = conv_features[0]
+    enc_attn_weights = enc_attn_weights[0]
+    dec_attn_weights = dec_attn_weights[0]
+
+    h, w = conv_features['0'].tensors.shape[-2:]
+
+    print ('(dec_attn_weights[0, idx].view(h, w))', (dec_attn_weights.transpose(0, 1).shape))
+
+    dec_attn_weights = dec_attn_weights.transpose(0, 1).cpu()
+    print ('bboxes_scaled', bboxes_scaled.shape)
+
+
+    fig, axs = plt.subplots(ncols=len(bboxes_scaled), nrows=2, figsize=(22, 7))
+    colors = V.COLORS * 100
+    for idx, ax_i, (xmin, ymin, xmax, ymax) in zip(keep.nonzero(), axs.T, bboxes_scaled):
+        ax = ax_i[0]
+        ax.imshow(dec_attn_weights[0, idx].view(16, 16))
+        ax.axis('off')
+        ax.set_title(f'query id: {idx.item()}')
+        ax = ax_i[1]
+        ax.imshow(im)
+        ax.add_patch(plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin,
+                                  fill=False, color='blue', linewidth=3))
+        ax.axis('off')
+        ax.set_title(V.CLASSES[probas[idx].argmax()])
+    fig.tight_layout()
+    
+
+    fig.savefig('/content/Explain-Deformable-DETR/explained /encoder feature map/1.png')
+
+
+    # print ('model.transformer.encoder.layers[-1].self_attn', model.transformer.encoder.layers[-1].self_attn)
+    # print ('enc_attn_weights.shape', enc_attn_weights.shape)
+
+
+
+    # model.transformer.encoder.layers[-1].self_attn.register_forward_hook(printnorm)
+
+    # outputs = model(img)
+
+
+
+
+    print ('-----------------------------------------------------------------------------')
 
     out_logits, out_bbox = outputs['pred_logits'], outputs['pred_boxes']
 
