@@ -17,8 +17,17 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.nn.init import xavier_uniform_, constant_
-
+from torchvision.utils import save_image
 from ..functions import MSDeformAttnFunction
+import numpy as np
+
+
+
+from PIL import Image
+import requests
+import matplotlib.pyplot as plt
+
+
 
 
 def _is_power_of_2(n):
@@ -26,6 +35,26 @@ def _is_power_of_2(n):
         raise ValueError("invalid input for _is_power_of_2: {} (type: {})".format(n, type(n)))
     return (n & (n-1) == 0) and n != 0
 
+color = np.array([1, 0.0, 0.0])
+
+def plot_sample_location_point(image_dir, sample_location_point, spatial_shape, attention_weight) :
+  image = Image.open(image_dir)
+  plt.imshow(image)
+  h = image.size[0]
+  w = image.size[1]
+  h_= spatial_shape[0]
+  w_ = spatial_shape[1]
+  
+  b = torch.FloatTensor(attention_weight)
+
+  sorted, indices = torch.sort(b)
+
+  for i in range(300):
+    x = sample_location_point[indices[i]][0]*h_*(h/h_)
+    y = sample_location_point[indices[i]][1]*w_*(w/w_)
+    #print ('attention_weight[i]',attention_weight[i])
+    plt.plot(x.item(), y.item(), 'o', color=sorted[i].item() * color);
+  plt.savefig('abcd.png')
 
 class MSDeformAttn(nn.Module):
     def __init__(self, d_model=256, n_levels=4, n_heads=8, n_points=4):
@@ -45,6 +74,7 @@ class MSDeformAttn(nn.Module):
             warnings.warn("You'd better set d_model in MSDeformAttn to make the dimension of each attention head a power of 2 "
                           "which is more efficient in our CUDA implementation.")
 
+
         self.im2col_step = 64
 
         self.d_model = d_model
@@ -56,6 +86,8 @@ class MSDeformAttn(nn.Module):
         self.attention_weights = nn.Linear(d_model, n_heads * n_levels * n_points)
         self.value_proj = nn.Linear(d_model, d_model)
         self.output_proj = nn.Linear(d_model, d_model)
+        self.sampling_locationss = False 
+        
 
         self._reset_parameters()
 
@@ -74,6 +106,12 @@ class MSDeformAttn(nn.Module):
         constant_(self.value_proj.bias.data, 0.)
         xavier_uniform_(self.output_proj.weight.data)
         constant_(self.output_proj.bias.data, 0.)
+
+    def get_sampling_location () :
+      return self.sampling_locationss
+
+    def set_sampling_location (sampling_location) :
+      sampling_locationss.append(sampling_location)
 
     def forward(self, query, reference_points, input_flatten, input_spatial_shapes, input_level_start_index, input_padding_mask=None):
         """
@@ -123,6 +161,35 @@ class MSDeformAttn(nn.Module):
         else:
             raise ValueError(
                 'Last dim of reference_points must be 2 or 4, but get {} instead.'.format(reference_points.shape[-1]))
+        
+        print (sampling_locations[0,0,0,0,])
+
+        point = []
+        attention_weight = []
+
+        level = 0
+
+        for i in range(300) :
+          point.append(sampling_locations[0,i,0,level,0,:].cpu())
+          attention_weight.append(attention_weights[0,i,0,level,0])
+        print (point[0:50])
+
+        image = input_flatten[0, 0:input_spatial_shapes[0,0]*input_spatial_shapes[0,1], 0]
+        image = image.view(input_spatial_shapes[0,0], input_spatial_shapes[0,1])
+
+
+
+        save_image(image , 'aa.png')
+
+
+
+
+        print ('input_flatten.shape', input_flatten.shape)
+        print ("input_spatial_shapes", input_spatial_shapes[0])
+        print ('sampling_locations', sampling_locations.shape)
+
+        plot_sample_location_point('/content/Explain-Deformable-DETR/data/63.jpg', point, input_spatial_shapes[level], attention_weight)
+
         output = MSDeformAttnFunction.apply(
             value, input_spatial_shapes, input_level_start_index, sampling_locations, attention_weights, self.im2col_step)
         output = self.output_proj(output)

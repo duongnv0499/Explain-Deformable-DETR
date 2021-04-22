@@ -104,10 +104,10 @@ class DeformableTransformer(nn.Module):
             wh = torch.ones_like(grid) * 0.05 * (2.0 ** lvl)
             proposal = torch.cat((grid, wh), -1).view(N_, -1, 4)
             print ('proposal width', W_.item())
-            abc = proposal.view(1, W_.item(), W_.item(), 4)
-            for i in range(4) :
-              name = "/content/Explain-Deformable-DETR/explained /proposal/" + str(lvl) + "_" + str(i)+".png"
-              save_image(abc[0][:,:,i], name)
+            #abc = proposal.view(1, W_.item(), W_.item(), 4)
+            # for i in range(4) :
+            #   name = "/content/Explain-Deformable-DETR/explained /proposal/" + str(lvl) + "_" + str(i)+".png"
+            #   save_image(abc[0][:,:,i], name)
               
             proposals.append(proposal)
             _cur += (H_ * W_)

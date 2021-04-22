@@ -56,3 +56,17 @@ def plot_results(pil_img, prob, boxes, name):
     plt.axis('off')
     plt.savefig(name)
     plt.show()
+
+
+def plot_sample_location_point(image_dir, sample_location_point, spatial_shape) :
+  image = Image.open(image_dir)
+  plt.imshow(image)
+  h = image.shape[0]
+  w = image.shape[1]
+  h_= spatial_shape[0]
+  w = spatial_shape[1]
+  for i in range(300):
+    x = sample_location_point[i,0]*h_*(h/h_)
+    y = sample_location_point[i,1]*w_*(w/w_)
+    plt.plot(sample_location_point[i,0], sample_location_point[i,1], 'o', color='black');
+  plt.savefig('abcd.png')
